@@ -1,0 +1,12 @@
+.vapid_keys.json
+.vapid_private.pem
+.scraper.lock
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.har
+*.env
+.venv/
+venv/

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Monitor de Averías Eléctricas</title>
+    
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ff9d00">
+    <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" type="image/x-icon">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192x192.png') }}">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ v }}">
+</head>
+<body>
+    <!-- Map Background -->
+    <div id="map"></div>
+
+    <!-- UI Overlay container -->
+    <div class="ui-container">
+        
+        <!-- Header & Search -->
+        <header class="glass-panel slide-down">
+            <div class="logo" style="display:flex; align-items:center; gap: 12px;">
+                <i class="fa-solid fa-bolt fa-fade" style="color: #ff9d00; font-size: 1.5rem;"></i>
+                <div style="display:flex; flex-direction:column; line-height: 1;">
+                    <h1 style="margin:0; padding:0;">E-Monitor <span>Live</span></h1>
+                    <span style="font-size: 0.65rem; color: var(--accent); font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.9; margin-top: 4px;">Code by Kikoso <i class="fa-solid fa-code"></i></span>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <div class="territory-box">
+                    <select id="territorySelect">
+                        <option value="">Toda España</option>
+                    </select>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </div>
+                
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="searchInput" placeholder="Buscar población...">
+                </div>
+                
+                <button id="notifToggle" class="icon-btn" title="Configurar alertas">
+                    <i class="fa-solid fa-bell"></i>
+                </button>
+
+                <button id="themeToggle" class="icon-btn" title="Alternar modo Claro/Oscuro">
+                    <i class="fa-solid fa-sun"></i>
+                </button>
+            </div>
+            
+            <div class="status-indicator">
+                <span class="dot pulse"></span>
+                <span id="updateTime">Actualizando...</span>
+            </div>
+        </header>
+
+        <!-- Main Content Area / Bottom Sheet on Mobile -->
+        <main class="content-layout" id="bottomSheet">
+            
+            <!-- Drag Handle (Solo visible en móvil) -->
+            <div class="drag-handle-container" id="dragHandle">
+                <div class="drag-bar"></div>
+            </div>
+
+            <!-- Mobile Tabs Navigation (Solo visible en móvil) -->
+            <div class="mobile-nav">
+                <button class="nav-btn active" data-target="right-panel"><i class="fa-solid fa-list"></i> Sucesos</button>
+                <button class="nav-btn" data-target="left-panel"><i class="fa-solid fa-chart-pie"></i> Estadísticas</button>
+            </div>
+
+            <!-- Statistics Panel (Historial de sucesos, provincias, comunidades) -->
+            <aside id="left-panel" class="left-panel glass-panel slide-right mobile-hidden">
+                <h2><i class="fa-solid fa-chart-pie"></i> Resumen por Zonas</h2>
+                <div class="stats-content">
+                    <div class="stats-section">
+                        <h3 id="statsTerritoriosHeading">Comunidades/Provincias</h3>
+                        <ul id="statsTerritorios" class="stats-list">
+                            <!-- Filled by JS -->
+                        </ul>
+                    </div>
+                    <div class="stats-section">
+                        <h3 id="statsMunicipiosHeading">Poblaciones Afectadas</h3>
+                        <ul id="statsMunicipios" class="stats-list">
+                            <!-- Filled by JS -->
+                        </ul>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Active / Recent Events Panel -->
+            <aside id="right-panel" class="right-panel glass-panel slide-left">
+                <div class="panel-header">
+                    <h2><i class="fa-solid fa-clock-rotate-left"></i> Historial</h2>
+                    <span class="badge" id="totalAverias">0 eventos</span>
+                </div>
+
+                <div class="events-list" id="eventsList">
+                    <!-- Events filled by JS -->
+                    <div class="loading-spinner">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i> Cargando...
+                    </div>
+                </div>
+            </aside>
+
+        </main>
+    </div>
+
+    <div id="notifModal" class="notif-modal hidden">
+        <div class="notif-modal-content glass-panel">
+            <div class="notif-modal-header">
+                <h2><i class="fa-solid fa-bell"></i> Alertas de Averías</h2>
+                <button id="notifClose" class="icon-btn" style="width:35px;height:35px;font-size:1rem;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="notif-tabs">
+                <button class="notif-tab active" data-tab="config"><i class="fa-solid fa-sliders"></i> Configurar</button>
+                <button class="notif-tab" data-tab="history"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
+            </div>
+
+            <!-- Tab: Configurar (existing) -->
+            <div id="notifTabConfig" class="notif-tab-content active">
+                <div id="notifStatus" class="notif-status"></div>
+                <div class="notif-filter">
+                    <div class="search-box" style="flex:1;">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="notifSearch" placeholder="Filtrar poblaciones...">
+                    </div>
+                </div>
+                <div id="notifMunicipioList" class="notif-municipio-list">
+                    <div style="text-align:center; padding:20px; color:var(--text-muted);">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i> Cargando...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: Historial -->
+            <div id="notifTabHistory" class="notif-tab-content">
+                <div id="notifHistoryList" class="notif-history-list">
+                    <div style="text-align:center; padding:40px; color:var(--text-muted);">
+                        <i class="fa-solid fa-clock-rotate-left" style="font-size:2rem; opacity:0.3; display:block; margin-bottom:10px;"></i>
+                        Pulsa para cargar el historial
+                    </div>
+                </div>
+            </div>
+
+            <div class="notif-modal-footer">
+                <span id="notifCount">0 poblaciones seleccionadas</span>
+                <button id="notifSave" class="notif-save-btn">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v={{ v }}"></script>
+    <script>
+        // Referencia global al registro del Service Worker (usada por push.js logic en main.js)
+        window.swRegistration = null;
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        window.swRegistration = registration;
+                        console.log('ServiceWorker registration successful');
+                    })
+                    .catch(error => {
+                        console.log('ServiceWorker registration failed: ', error);
+                    });
+            });
+
+            // Detect when the new Service Worker takes over and reload the page
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!refreshing) {
+                    window.location.reload();
+                    refreshing = true;
+                }
+            });
+
+            // Manejar clicks en notificaciones cuando la app ya está abierta
+            navigator.serviceWorker.addEventListener('message', event => {
+                if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
+                    const searchInput = document.getElementById('searchInput');
+                    if (searchInput && event.data.municipio) {
+                        searchInput.value = event.data.municipio;
+                        if (typeof renderMapAndList === 'function') {
+                            window.shouldFitBounds = true;
+                            renderMapAndList();
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
